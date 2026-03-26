@@ -104,9 +104,15 @@ class FCBasisSetO2(FCBasisSetBase):
             )
         if self._compression_matrix is None:
             trans_perms = self._spg_reps.translation_permutations
-            c_trans = get_lat_trans_compr_matrix_O2(trans_perms)
-            self._compression_matrix = dot_product_sparse(
-                c_trans, self._n_a_compression_matrix, use_mkl=self._use_mkl
+            n_lp = trans_perms.shape[0]
+            # c_trans is a row-selection matrix: c_trans @ X = X[decompr_idx] / sqrt(n_lp)
+            # Derive full decompr_idx from atomic version
+            full_decompr_idx = np.repeat(
+                self._atomic_decompr_idx * 9, 9
+            ) + np.tile(np.arange(9), len(self._atomic_decompr_idx))
+            self._compression_matrix = (
+                self._n_a_compression_matrix[full_decompr_idx]
+                * (1.0 / np.sqrt(n_lp))
             )
         return self._compression_matrix
 
