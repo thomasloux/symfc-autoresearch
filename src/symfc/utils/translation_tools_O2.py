@@ -130,7 +130,9 @@ def compressed_projector_sum_rules_O2(
         n_batch = _auto_n_batch_sum_rules_O2(natom)
     batch_size = optimize_batch_size_sum_rules_O2(natom, n_batch=n_batch)
     ab = np.arange(9)
-    for begin, end in zip(*get_batch_slice(NN, batch_size), strict=True):
+
+    def _compute_batch(begin, end):
+        """Compute one batch of the sum rule projector."""
         size = end - begin
         size_vector = size * 9
         size_row = size_vector // natom
@@ -138,7 +140,7 @@ def compressed_projector_sum_rules_O2(
         nonzero_b = nonzero[begin:end]
         size_data = np.count_nonzero(nonzero_b) * 9
         if size_data == 0:
-            continue
+            return None
 
         decompr_idx_b = decompr_idx[begin:end][nonzero_b]
         c_sum_cplmt = csr_array(
@@ -152,8 +154,28 @@ def compressed_projector_sum_rules_O2(
             shape=(size_row, NN9 // n_lp),
             dtype="double",
         )
-        c_sum_cplmt = dot_product_sparse(c_sum_cplmt, n_a_compress_mat, use_mkl=use_mkl)
-        proj_cplmt += dot_product_sparse(c_sum_cplmt.T, c_sum_cplmt, use_mkl=use_mkl)
+        c_sum_cplmt = dot_product_sparse(
+            c_sum_cplmt, n_a_compress_mat, use_mkl=use_mkl
+        )
+        return dot_product_sparse(c_sum_cplmt.T, c_sum_cplmt, use_mkl=use_mkl)
+
+    batches = list(zip(*get_batch_slice(NN, batch_size), strict=True))
+
+    if len(batches) > 1:
+        from concurrent.futures import ThreadPoolExecutor
+
+        with ThreadPoolExecutor(max_workers=len(batches)) as executor:
+            results = list(executor.map(
+                lambda b: _compute_batch(b[0], b[1]), batches
+            ))
+        for result in results:
+            if result is not None:
+                proj_cplmt += result
+    else:
+        for begin, end in batches:
+            result = _compute_batch(begin, end)
+            if result is not None:
+                proj_cplmt += result
 
     proj_cplmt /= natom
     return scipy.sparse.identity(proj_cplmt.shape[0]) - proj_cplmt
