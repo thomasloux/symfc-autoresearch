@@ -181,6 +181,7 @@ class FCBasisSetO2(FCBasisSetBase):
             use_mkl=self._use_mkl,
             verbose=self._log_level > 0,
             precomputed_blocks=precomputed_blocks,
+            is_complement_projector=want_blocks,
         )
 
         self._blocked_basis_set = eigvecs

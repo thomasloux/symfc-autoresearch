@@ -59,6 +59,7 @@ def eigsh_projector_sumrule(
     use_mkl: bool = False,
     verbose: bool = True,
     precomputed_blocks: dict | None = None,
+    is_complement_projector: bool = False,
 ) -> BlockMatrixNode:
     r"""Solve eigenvalue problem for matrix p.
 
@@ -99,4 +100,5 @@ def eigsh_projector_sumrule(
         use_mkl=use_mkl,
         verbose=verbose,
         precomputed_blocks=precomputed_blocks,
+        is_complement_projector=is_complement_projector,
     )

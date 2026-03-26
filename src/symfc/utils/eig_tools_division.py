@@ -5,6 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+import scipy.sparse
 from numpy.typing import NDArray
 from scipy.sparse import csr_array
 
@@ -311,6 +312,7 @@ def eigsh_projector_sumrule(
     use_mkl: bool = False,
     verbose: bool = True,
     precomputed_blocks: dict | None = None,
+    is_complement_projector: bool = False,
 ) -> BlockMatrixNode:
     """Solve eigenvalue problem for matrix p.
 
@@ -346,11 +348,21 @@ def eigsh_projector_sumrule(
             p_block = p_dense[np.ix_(ids, ids)]
         else:
             p_block = p[np.ix_(ids, ids)]
+
+        if is_complement_projector:
+            # Convert complement projector P^(c) to projector I - P^(c) at block level
+            # Much cheaper than doing I - P on the full matrix
+            n_block = p_block.shape[0]
+            if isinstance(p_block, np.ndarray):
+                p_block = np.eye(n_block) - p_block
+            else:
+                p_block = scipy.sparse.identity(n_block, format="csr") - p_block
+
         rank = matrix_rank(p_block)
         if rank == 0:
             continue
         if p_block.shape[0] < size_threshold:
-            if p_dense is None:
+            if not isinstance(p_block, np.ndarray):
                 p_block = p_block.toarray()
         block_tasks.append((ids, p_block))
 

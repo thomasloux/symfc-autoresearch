@@ -235,7 +235,12 @@ def compressed_projector_sum_rules_O2(
                 proj_cplmt += result
 
     proj_cplmt /= natom
-    proj = scipy.sparse.identity(proj_cplmt.shape[0]) - proj_cplmt
+    if not return_blocks:
+        proj = scipy.sparse.identity(proj_cplmt.shape[0]) - proj_cplmt
+    else:
+        # Skip expensive I-P on full matrix; pass complement projector directly.
+        # The I-P will be applied per-block in eigsh_projector_sumrule (much cheaper).
+        proj = proj_cplmt
 
     if return_blocks:
         # Find block structure from column co-occurrence in C matrices
