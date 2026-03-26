@@ -167,12 +167,26 @@ def compute_sg_permutations(
 
     unique_rotation_perms = []
     for rotated_positions in unique_rotated_positions:
-        diffs = positions[None, :, :] - rotated_positions[:, None, :]
-        diffs -= np.rint(diffs)
-        dists = np.linalg.norm(diffs @ lattice.T, axis=2)
-        rows, cols = np.where(dists < symprec)
-        assert len(positions) == len(np.unique(rows)) == len(np.unique(cols))
-        unique_rotation_perms.append(cols[np.argsort(rows)])
+        rot_rounded = round_positions(rotated_positions, decimals=decimals)
+        rot_int = (rot_rounded * _scale).astype(np.int64)
+        rot_keys = (
+            (rot_int[:, 0] - _offset) * _max_val**2
+            + (rot_int[:, 1] - _offset) * _max_val
+            + (rot_int[:, 2] - _offset)
+        )
+        indices = np.searchsorted(_sorted_keys, rot_keys)
+        if (
+            indices.max() < n_atom
+            and np.array_equal(_sorted_keys[indices], rot_keys)
+        ):
+            unique_rotation_perms.append(_sorted_order[indices])
+        else:
+            diffs = positions[None, :, :] - rotated_positions[:, None, :]
+            diffs -= np.rint(diffs)
+            dists = np.linalg.norm(diffs @ lattice.T, axis=2)
+            rows, cols = np.where(dists < symprec)
+            assert len(positions) == len(np.unique(rows)) == len(np.unique(cols))
+            unique_rotation_perms.append(cols[np.argsort(rows)])
     unique_rotation_perms = np.array(unique_rotation_perms, dtype=int)
 
     r2ur_arr = np.array(r2ur)
