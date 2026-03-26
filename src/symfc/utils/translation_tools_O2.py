@@ -26,16 +26,12 @@ def optimize_batch_size_sum_rules_O2(natom: int, n_batch: int):
 
 
 def _auto_n_batch_sum_rules_O2(natom: int) -> int:
-    """Auto-select n_batch to keep intermediate matrices manageable."""
-    # For large systems, split into batches to keep c_sum_cplmt rows < ~2000
-    # size_row per batch = 9 * natom / n_batch
-    target_rows = 2000
-    n_batch = max(1, (9 * natom) // target_rows)
-    # Round to nearest divisor of natom for clean batches
-    for divisor in range(n_batch, natom + 1):
-        if natom % divisor == 0:
-            return divisor
-    return natom
+    """Auto-select n_batch for sum rules projector construction.
+
+    n_batch=2 is empirically optimal for large systems: it halves the size
+    of the expensive C.T @ C sparse product while keeping overhead low.
+    """
+    return 2
 
 
 def compressed_projector_sum_rules_O2(
