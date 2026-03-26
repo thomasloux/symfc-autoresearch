@@ -42,6 +42,21 @@ def eigsh_projector(
     """
     compr = CompressionProjector(p)
     cp = compr.compressed_projector
+
+    # Fast path for diagonal projectors (all blocks size 1)
+    if cp.nnz <= cp.shape[0]:
+        diag = cp.diagonal()
+        nonzero_mask = ~np.isclose(diag, 0.0, atol=atol, rtol=rtol)
+        nonzero_indices = np.where(nonzero_mask)[0]
+        if verbose:
+            print("Diagonal projector fast path:", len(nonzero_indices), "eigvecs")
+        n = len(nonzero_indices)
+        eigvecs = csr_array(
+            (np.ones(n, dtype="double"), (nonzero_indices, np.arange(n))),
+            shape=(cp.shape[0], n),
+        )
+        return compr.recover(eigvecs)
+
     group = find_projector_blocks(cp, verbose=verbose)
     if verbose:
         rank = matrix_rank(compr.compressed_projector)
