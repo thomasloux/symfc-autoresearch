@@ -1,0 +1,4 @@
+commit	wall_clock_s	memory_gb	fc_correct	status	description
+b128d68	0.2976	0.0	true	keep	baseline (128 atoms)
+5a56988	25.9957	6.5	true	keep	NEW BASELINE (1024 atoms, * 2)
+ab9f6a1	14.9055	7.1	true	keep	BEST (1024 atoms) — all optimizations + union-find block precomputation
