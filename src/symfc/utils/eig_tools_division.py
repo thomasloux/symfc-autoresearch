@@ -310,6 +310,7 @@ def eigsh_projector_sumrule(
     size_threshold: int = MIN_BLOCK_SIZE,
     use_mkl: bool = False,
     verbose: bool = True,
+    precomputed_blocks: dict | None = None,
 ) -> BlockMatrixNode:
     """Solve eigenvalue problem for matrix p.
 
@@ -326,7 +327,10 @@ def eigsh_projector_sumrule(
     matrices. Otherwise, this function use a submatrix division algorithm
     to solve the eigenvalue problem of each block matrix.
     """
-    group = find_projector_blocks(p, verbose=verbose)
+    if precomputed_blocks is not None:
+        group = precomputed_blocks
+    else:
+        group = find_projector_blocks(p, verbose=verbose)
     order = _get_descending_order(group)
     if verbose:
         print("Number of blocks in projector (Sum rule):", len(group), flush=True)

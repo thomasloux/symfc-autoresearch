@@ -1,5 +1,6 @@
 """Functions for introducing translational invariance in 2nd order force constants."""
 
+from collections import defaultdict
 from typing import Optional
 
 import numpy as np
@@ -15,6 +16,57 @@ try:
     from symfc.utils.matrix import dot_product_sparse
 except ImportError:
     pass
+
+
+def _find_blocks_from_sparse_columns(c: csr_array) -> dict:
+    """Find connected components from column co-occurrence in sparse matrix.
+
+    Two columns are connected if they appear as nonzero entries in the same
+    row. This is equivalent to the block structure of C.T @ C but much faster
+    to compute since C is much sparser.
+
+    Uses union-find (disjoint set) data structure.
+    """
+    n_cols = c.shape[1]
+    parent = np.arange(n_cols)
+    rank = np.zeros(n_cols, dtype=int)
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]  # path compression
+            x = parent[x]
+        return x
+
+    def union(x, y):
+        rx, ry = find(x), find(y)
+        if rx == ry:
+            return
+        if rank[rx] < rank[ry]:
+            rx, ry = ry, rx
+        parent[ry] = rx
+        if rank[rx] == rank[ry]:
+            rank[rx] += 1
+
+    # For each row, union all nonzero columns together
+    for i in range(c.shape[0]):
+        start, end = c.indptr[i], c.indptr[i + 1]
+        if end - start < 2:
+            continue
+        cols = c.indices[start:end]
+        first = cols[0]
+        for j in range(1, len(cols)):
+            union(first, cols[j])
+
+    # Flatten parents (full path compression)
+    for i in range(n_cols):
+        parent[i] = find(i)
+
+    # Group by root
+    group = defaultdict(list)
+    for i in range(n_cols):
+        group[parent[i]].append(i)
+
+    return dict(group)
 
 
 def optimize_batch_size_sum_rules_O2(natom: int, n_batch: int):
@@ -41,7 +93,8 @@ def compressed_projector_sum_rules_O2(
     fc_cutoff: Optional[FCCutoff] = None,
     n_batch: int = 1,
     use_mkl: bool = False,
-) -> csr_array:
+    return_blocks: bool = False,
+) -> "csr_array | tuple[csr_array, dict]":
     r"""Return projection matrix for translational sum rule.
 
     Calculate a compressed projector for translational sum rules
@@ -131,6 +184,8 @@ def compressed_projector_sum_rules_O2(
     batch_size = optimize_batch_size_sum_rules_O2(natom, n_batch=n_batch)
     ab = np.arange(9)
 
+    all_c_compressed = []  # Collect for block structure detection
+
     def _compute_batch(begin, end):
         """Compute one batch of the sum rule projector."""
         size = end - begin
@@ -157,6 +212,8 @@ def compressed_projector_sum_rules_O2(
         c_sum_cplmt = dot_product_sparse(
             c_sum_cplmt, n_a_compress_mat, use_mkl=use_mkl
         )
+        if return_blocks:
+            all_c_compressed.append(c_sum_cplmt)
         return dot_product_sparse(c_sum_cplmt.T, c_sum_cplmt, use_mkl=use_mkl)
 
     batches = list(zip(*get_batch_slice(NN, batch_size), strict=True))
@@ -178,7 +235,18 @@ def compressed_projector_sum_rules_O2(
                 proj_cplmt += result
 
     proj_cplmt /= natom
-    return scipy.sparse.identity(proj_cplmt.shape[0]) - proj_cplmt
+    proj = scipy.sparse.identity(proj_cplmt.shape[0]) - proj_cplmt
+
+    if return_blocks:
+        # Find block structure from column co-occurrence in C matrices
+        # Much faster than connected_components on the large C.T @ C
+        from scipy.sparse import vstack as sparse_vstack
+
+        c_all = sparse_vstack(all_c_compressed, format="csr")
+        blocks = _find_blocks_from_sparse_columns(c_all)
+        del c_all
+        return proj, blocks
+    return proj
 
 
 def compressed_projector_sum_rules_O2_stable(

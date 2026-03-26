@@ -149,14 +149,23 @@ class FCBasisSetO2(FCBasisSetBase):
         c_rpt = eigsh_projector(proj_rpt, verbose=self._log_level > 0)
         n_a_compress_mat = dot_product_sparse(c_pt, c_rpt, use_mkl=self._use_mkl)
 
-        proj = compressed_projector_sum_rules_O2(
+        # Request precomputed blocks for large systems to avoid expensive
+        # connected_components on the result projector matrix
+        want_blocks = not rotational_sum_rules
+        result = compressed_projector_sum_rules_O2(
             trans_perms,
             n_a_compress_mat,
             atomic_decompr_idx=self._atomic_decompr_idx,
             fc_cutoff=self._fc_cutoff,
             use_mkl=self._use_mkl,
+            return_blocks=want_blocks,
             # verbose=self._log_level > 0,
         )
+        if want_blocks:
+            proj, precomputed_blocks = result
+        else:
+            proj = result
+            precomputed_blocks = None
 
         if rotational_sum_rules:
             proj_rot_cmplt = complementary_compr_projector_rot_sum_rules_O2(
@@ -171,6 +180,7 @@ class FCBasisSetO2(FCBasisSetBase):
             proj,
             use_mkl=self._use_mkl,
             verbose=self._log_level > 0,
+            precomputed_blocks=precomputed_blocks,
         )
 
         self._blocked_basis_set = eigvecs

@@ -58,6 +58,7 @@ def eigsh_projector_sumrule(
     size_threshold: int = MIN_BLOCK_SIZE,
     use_mkl: bool = False,
     verbose: bool = True,
+    precomputed_blocks: dict | None = None,
 ) -> BlockMatrixNode:
     r"""Solve eigenvalue problem for matrix p.
 
@@ -97,4 +98,5 @@ def eigsh_projector_sumrule(
         size_threshold=size_threshold,
         use_mkl=use_mkl,
         verbose=verbose,
+        precomputed_blocks=precomputed_blocks,
     )
