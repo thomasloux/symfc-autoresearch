@@ -24,17 +24,11 @@ def get_indep_atoms_by_lat_trans(trans_perms: NDArray) -> NDArray:
         shape=(n_indep_atoms_by_lattice_translation,), dtype=int
 
     """
-    unique_atoms: list[int] = []
     assert np.array_equal(trans_perms[0, :], range(trans_perms.shape[1]))
-    for i, perms in enumerate(trans_perms.T):
-        is_found = False
-        for j in unique_atoms:
-            if j in perms:
-                is_found = True
-                break
-        if not is_found:
-            unique_atoms.append(i)
-    return np.array(unique_atoms, dtype=int)
+    # Each atom's orbit representative is the smallest index in its orbit
+    representatives = np.min(trans_perms, axis=0)
+    unique_atoms = np.unique(representatives)
+    return np.asarray(unique_atoms, dtype=int)
 
 
 def round_positions(positions: NDArray, tol: float = 1e-13, decimals: int = 5):
@@ -62,7 +56,8 @@ def _find_optimal_decimals(positions: NDArray, tol: float = 1e-13):
     n_atom = positions.shape[0]
     for decimals in range(3, 15):
         positions_round = round_positions(positions, tol=tol, decimals=decimals)
-        n_atom_uniq = len(set([tuple(pos) for pos in positions_round]))
+        # Use numpy unique on rows instead of Python set of tuples
+        n_atom_uniq = len(np.unique(positions_round, axis=0))
         if n_atom_uniq == n_atom:
             return decimals
     raise RuntimeError("Optimal decimals not found.")
