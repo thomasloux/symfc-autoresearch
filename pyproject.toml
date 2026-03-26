@@ -24,6 +24,13 @@ license-files = ["LICENSE"]
 [project.urls]
 "Homepage" = "https://github.com/symfc/symfc"
 
+[project.optional-dependencies]
+benchmark = [
+    "ase>=3.28.0",
+    "phonopy>=3.2.1",
+    "pymatgen>=2025.10.7",
+]
+
 [tool.setuptools.dynamic]
 version = { attr = "symfc.version.__version__" }
 
