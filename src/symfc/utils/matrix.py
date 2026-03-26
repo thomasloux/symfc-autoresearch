@@ -9,8 +9,11 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import csr_array
 
+_HAS_MKL = False
 try:
     from sparse_dot_mkl import dot_product_mkl  # type: ignore
+
+    _HAS_MKL = True
 except ImportError:
     pass
 
@@ -27,7 +30,7 @@ def dot_product_sparse(
     dense: bool = False,
 ) -> csr_array:
     """Compute dot-product of sparse matrices."""
-    if use_mkl:
+    if use_mkl or _HAS_MKL:
         return dot_product_mkl(A, B, dense=dense)
     return A @ B
 

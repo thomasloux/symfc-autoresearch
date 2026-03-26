@@ -29,6 +29,8 @@ benchmark = [
     "ase>=3.28.0",
     "phonopy>=3.2.1",
     "pymatgen>=2025.10.7",
+    "mkl",
+    "sparse_dot_mkl",
 ]
 
 [tool.setuptools.dynamic]
