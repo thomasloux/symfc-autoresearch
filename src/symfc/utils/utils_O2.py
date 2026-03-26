@@ -87,16 +87,20 @@ def get_lat_trans_compr_indices(trans_perms: NDArray) -> NDArray:
     n_lp = N // n_a
     size_row = (N * 3) ** 2
 
-    n = 0
     indices = np.zeros((n_a * N * 9, n_lp), dtype="int_")
-    for i_patom in indep_atoms:
-        for j in range(N):
-            for ab in range(9):
-                indices[n, :] = (
-                    trans_perms[:, i_patom] * 9 * N + trans_perms[:, j] * 9 + ab
-                )
-                n += 1
-    assert n * n_lp == size_row
+    ab = np.arange(9)
+    for idx_a, i_patom in enumerate(indep_atoms):
+        # atom_base[lp, j] = trans_perms[lp, i_patom]*9*N + trans_perms[lp, j]*9
+        atom_base = (
+            trans_perms[:, i_patom, None] * 9 * N + trans_perms * 9
+        )  # (n_lp, N)
+        # Expand with ab: (n_lp, N, 9)
+        all_indices = atom_base[:, :, None] + ab[None, None, :]  # (n_lp, N, 9)
+        # Reshape to (n_lp, N*9) then transpose to (N*9, n_lp)
+        row_start = idx_a * N * 9
+        row_end = row_start + N * 9
+        indices[row_start:row_end, :] = all_indices.reshape(n_lp, N * 9).T
+    assert n_a * N * 9 * n_lp == size_row
     return indices
 
 
