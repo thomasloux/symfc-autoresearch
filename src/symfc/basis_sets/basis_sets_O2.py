@@ -87,6 +87,7 @@ class FCBasisSetO2(FCBasisSetBase):
         self._atomic_decompr_idx = _get_atomic_lat_trans_decompr_indices(trans_perms)
 
         self._n_a_compression_matrix: csr_array | None = None
+        self._compression_matrix: csr_array | None = None
         self._basis_set: np.ndarray | None = None
         self._blocked_basis_set: BlockMatrixNode | None = None
 
@@ -101,11 +102,13 @@ class FCBasisSetO2(FCBasisSetBase):
             raise ValueError(
                 "Compression matrix is not computed. Call run() method to compute it."
             )
-        trans_perms = self._spg_reps.translation_permutations
-        c_trans = get_lat_trans_compr_matrix_O2(trans_perms)
-        return dot_product_sparse(
-            c_trans, self._n_a_compression_matrix, use_mkl=self._use_mkl
-        )
+        if self._compression_matrix is None:
+            trans_perms = self._spg_reps.translation_permutations
+            c_trans = get_lat_trans_compr_matrix_O2(trans_perms)
+            self._compression_matrix = dot_product_sparse(
+                c_trans, self._n_a_compression_matrix, use_mkl=self._use_mkl
+            )
+        return self._compression_matrix
 
     @property
     def compact_compression_matrix(self) -> csr_array:
