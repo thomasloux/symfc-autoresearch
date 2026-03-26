@@ -24,7 +24,6 @@ from symfc.utils.utils import SymfcAtoms
 from symfc.utils.utils_O2 import (
     _get_atomic_lat_trans_decompr_indices,
     get_compr_coset_projector_O2,
-    get_lat_trans_compr_matrix_O2,
 )
 
 from .basis_sets_base import FCBasisSetBase
