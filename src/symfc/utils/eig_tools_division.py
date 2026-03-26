@@ -329,6 +329,9 @@ def eigsh_projector_sumrule(
     if verbose:
         print("Number of blocks in projector (Sum rule):", len(group), flush=True)
 
+    # Pre-convert small projectors to dense for faster block extraction
+    p_dense = p.toarray() if p.shape[0] < size_threshold else None  # type: ignore
+
     sibling, col_id = None, 0
     for i, key in enumerate(order):
         ids = np.array(group[key])
@@ -337,7 +340,10 @@ def eigsh_projector_sumrule(
             print(prefix, i + 1, "/", len(group), "------------", flush=True)
             print("Block_size:", len(ids), flush=True)
 
-        p_block = p[np.ix_(ids, ids)]
+        if p_dense is not None:
+            p_block = p_dense[np.ix_(ids, ids)]
+        else:
+            p_block = p[np.ix_(ids, ids)]
         rank = matrix_rank(p_block)
         if rank == 0:
             if verbose:
@@ -347,7 +353,8 @@ def eigsh_projector_sumrule(
         if p_block.shape[0] < size_threshold:
             if verbose:
                 print("Use standard eigh solver.", flush=True)
-            p_block = p_block.toarray()
+            if p_dense is None:
+                p_block = p_block.toarray()
             res = eigh_projector(p_block, atol=atol, rtol=rtol, verbose=verbose)
             sibling = link_block_matrix_nodes(
                 res.eigvecs, sibling, rows=ids, col_begin=col_id
