@@ -44,16 +44,18 @@ def get_lat_trans_decompr_indices(trans_perms: NDArray) -> NDArray:
     n_lp = N // n_a
     size_row = (N * 3) ** 2
 
-    n = 0
     indices = np.zeros(size_row, dtype="int_")
-    for i_patom in indep_atoms:
-        index_shift_i = trans_perms[:, i_patom] * N * 9
-        for j in range(N):
-            index_shift = index_shift_i + trans_perms[:, j] * 9
-            for ab in range(9):
-                indices[index_shift + ab] = n
-                n += 1
-    assert n * n_lp == size_row
+    ab = np.arange(9)  # (9,)
+    for idx_a, i_patom in enumerate(indep_atoms):
+        # atom_shifts[lp, j] = trans_perms[lp, i_patom]*N*9 + trans_perms[lp, j]*9
+        atom_shifts = (
+            trans_perms[:, i_patom, None] * N * 9 + trans_perms * 9
+        )  # (n_lp, N)
+        # Expand with ab offsets: (n_lp, N, 9)
+        all_shifts = atom_shifts[:, :, None] + ab[None, None, :]
+        base_n = idx_a * N * 9 + np.arange(N * 9)  # (N*9,)
+        indices[all_shifts.ravel()] = np.tile(base_n, n_lp)
+    assert n_a * N * 9 * n_lp == size_row
     return indices
 
 
@@ -196,15 +198,14 @@ def _get_atomic_lat_trans_decompr_indices(trans_perms: NDArray) -> NDArray:
     n_lp, N = trans_perms.shape
     size_row = N**2
 
-    n = 0
     indices = np.zeros(size_row, dtype="int_")
-    for i_patom in indep_atoms:
-        index_shift_i = trans_perms[:, i_patom] * N
-        for j in range(N):
-            index_shift = index_shift_i + trans_perms[:, j]
-            indices[index_shift] = n
-            n += 1
-    assert n * n_lp == size_row
+    n_a = len(indep_atoms)
+    for idx_a, i_patom in enumerate(indep_atoms):
+        # all_shifts[lp, j] = trans_perms[lp, i_patom] * N + trans_perms[lp, j]
+        all_shifts = trans_perms[:, i_patom, None] * N + trans_perms  # (n_lp, N)
+        base_n = idx_a * N + np.arange(N)  # (N,)
+        indices[all_shifts.ravel()] = np.tile(base_n, n_lp)
+    assert n_a * N * n_lp == size_row
     return indices
 
 
