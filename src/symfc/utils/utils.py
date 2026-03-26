@@ -107,19 +107,41 @@ def compute_sg_permutations(
     pure_trans = []
     n_atom = positions.shape[0]
     decimals = _find_optimal_decimals(positions)
-    sorted_ids, sorted_positions = argsort_positions(positions, decimals=decimals)
+
+    # Build fast position lookup via integer keys and searchsorted
+    pos_rounded = round_positions(positions, decimals=decimals)
+    _scale = 10**decimals
+    _pos_int = (pos_rounded * _scale).astype(np.int64)
+    _max_val = int(_pos_int.max() - _pos_int.min()) + 1
+    _offset = _pos_int.min()
+    _pos_keys = (
+        (_pos_int[:, 0] - _offset) * _max_val**2
+        + (_pos_int[:, 1] - _offset) * _max_val
+        + (_pos_int[:, 2] - _offset)
+    )
+    _sorted_order = np.argsort(_pos_keys)
+    _sorted_keys = _pos_keys[_sorted_order]
+
+    identity = np.eye(3, dtype=int)
     for r, t in zip(rotations, translations, strict=True):
-        if (r != np.eye(3, dtype=int)).any():
+        if (r != identity).any():
             continue
-        trans_positions = positions + t
-        sorted_trans_ids, sorted_trans_positions = argsort_positions(
-            trans_positions,
-            decimals=decimals,
+        trans_rounded = round_positions(positions + t, decimals=decimals)
+        trans_int = (trans_rounded * _scale).astype(np.int64)
+        trans_keys = (
+            (trans_int[:, 0] - _offset) * _max_val**2
+            + (trans_int[:, 1] - _offset) * _max_val
+            + (trans_int[:, 2] - _offset)
         )
-        if np.allclose(sorted_trans_positions - sorted_positions, 0.0):
-            tp = np.zeros(n_atom, dtype=int)
-            tp[sorted_trans_ids] = sorted_ids
+        indices = np.searchsorted(_sorted_keys, trans_keys)
+        if (
+            indices.max() < n_atom
+            and np.array_equal(_sorted_keys[indices], trans_keys)
+        ):
+            tp = _sorted_order[indices]
         else:
+            # Fallback to distance matrix
+            trans_positions = positions + t
             diffs = positions[None, :, :] - trans_positions[:, None, :]
             diffs -= np.rint(diffs)
             dists = np.linalg.norm(diffs @ lattice.T, axis=2)
@@ -158,17 +180,20 @@ def compute_sg_permutations(
         unique_rotation_perms.append(cols[np.argsort(rows)])
     unique_rotation_perms = np.array(unique_rotation_perms, dtype=int)
 
-    out = []
-    for i, t in enumerate(translations):
-        perms = unique_rotation_perms[r2ur[i]]
-        lattice_trans = t - unique_t[r2ur[i]]
-        diffs = pure_trans - lattice_trans
-        diffs -= np.rint(diffs)
-        dists = np.linalg.norm(diffs @ lattice.T, axis=1)
-        lat_trans_idx = np.where(dists < symprec)
-        assert len(lat_trans_idx) == 1
-        out.append(trans_perms[lat_trans_idx[0], perms])
-    out = np.array(out, dtype="intc", order="C")
+    r2ur_arr = np.array(r2ur)
+    unique_t_arr = np.array(unique_t)
+    lattice_trans_all = translations - unique_t_arr[r2ur_arr]  # (n_ops, 3)
+    # Find matching pure translations for all operations at once
+    diffs = lattice_trans_all[:, None, :] - pure_trans[None, :, :]  # (n_ops, n_trans, 3)
+    diffs -= np.rint(diffs)
+    dists = np.linalg.norm(diffs @ lattice.T, axis=2)  # (n_ops, n_trans)
+    lat_trans_indices = np.argmin(dists, axis=1)  # (n_ops,)
+    assert np.all(dists[np.arange(len(dists)), lat_trans_indices] < symprec)
+    # Build output: chain rotation and translation permutations
+    rot_perms = unique_rotation_perms[r2ur_arr]  # (n_ops, n_atom)
+    out = trans_perms[lat_trans_indices]  # (n_ops, n_atom)
+    out = np.take_along_axis(out, rot_perms, axis=1)
+    out = np.asarray(out, dtype="intc", order="C")
     return out
 
 
