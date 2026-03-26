@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 import numpy as np
 from numpy.typing import NDArray
 from scipy.sparse import csr_array
@@ -332,52 +334,53 @@ def eigsh_projector_sumrule(
     # Pre-convert small projectors to dense for faster block extraction
     p_dense = p.toarray() if p.shape[0] < size_threshold else None  # type: ignore
 
-    sibling, col_id = None, 0
+    # Extract all blocks and their metadata
+    block_tasks: list[tuple[NDArray, NDArray | csr_array]] = []
     for i, key in enumerate(order):
         ids = np.array(group[key])
-        if verbose and len(ids) > 0:
-            prefix = "------------ Eigsh_solver_block:"
-            print(prefix, i + 1, "/", len(group), "------------", flush=True)
-            print("Block_size:", len(ids), flush=True)
-
         if p_dense is not None:
             p_block = p_dense[np.ix_(ids, ids)]
         else:
             p_block = p[np.ix_(ids, ids)]
         rank = matrix_rank(p_block)
         if rank == 0:
-            if verbose:
-                print("No eigenvectors.", flush=True)
             continue
-
         if p_block.shape[0] < size_threshold:
-            if verbose:
-                print("Use standard eigh solver.", flush=True)
             if p_dense is None:
                 p_block = p_block.toarray()
-            res = eigh_projector(p_block, atol=atol, rtol=rtol, verbose=verbose)
-            sibling = link_block_matrix_nodes(
-                res.eigvecs, sibling, rows=ids, col_begin=col_id
-            )
-            col_id += res.n_eigvecs
+        block_tasks.append((ids, p_block))
 
+    def _solve_one_block(p_block):
+        """Solve eigenvalue problem for one block."""
+        if isinstance(p_block, np.ndarray) or p_block.shape[0] < size_threshold:
+            return eigh_projector(p_block, atol=atol, rtol=rtol, verbose=False)
         else:
-            if verbose:
-                print("Use submatrix version of eigh solver.", flush=True)
-            res = eigsh_projector_division(
+            return eigsh_projector_division(
                 p_block,
                 atol=atol,
                 rtol=rtol,
                 return_cmplt=False,
                 use_mkl=use_mkl,
-                verbose=verbose,
+                verbose=False,
             )
-            sibling = link_block_matrix_nodes(
-                res.eigvecs, sibling, rows=ids, col_begin=col_id
-            )
-            col_id += res.n_eigvecs
 
-        del p_block
+    # Solve blocks in parallel using threads (eigh releases the GIL)
+    if len(block_tasks) > 1:
+        n_workers = min(len(block_tasks), 6)
+        with ThreadPoolExecutor(max_workers=n_workers) as executor:
+            results = list(executor.map(
+                lambda task: _solve_one_block(task[1]), block_tasks
+            ))
+    else:
+        results = [_solve_one_block(bt[1]) for bt in block_tasks]
+
+    # Assemble results into block matrix tree
+    sibling, col_id = None, 0
+    for (ids, _), res in zip(block_tasks, results):
+        sibling = link_block_matrix_nodes(
+            res.eigvecs, sibling, rows=ids, col_begin=col_id
+        )
+        col_id += res.n_eigvecs
 
     block = root_block_matrix((p.shape[0], col_id), first_child=sibling)  # type: ignore
     assert block is not None
