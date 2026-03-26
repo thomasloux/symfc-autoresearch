@@ -25,6 +25,19 @@ def optimize_batch_size_sum_rules_O2(natom: int, n_batch: int):
     return batch_size
 
 
+def _auto_n_batch_sum_rules_O2(natom: int) -> int:
+    """Auto-select n_batch to keep intermediate matrices manageable."""
+    # For large systems, split into batches to keep c_sum_cplmt rows < ~2000
+    # size_row per batch = 9 * natom / n_batch
+    target_rows = 2000
+    n_batch = max(1, (9 * natom) // target_rows)
+    # Round to nearest divisor of natom for clean batches
+    for divisor in range(n_batch, natom + 1):
+        if natom % divisor == 0:
+            return divisor
+    return natom
+
+
 def compressed_projector_sum_rules_O2(
     trans_perms: np.ndarray,
     n_a_compress_mat: csr_array,
@@ -116,6 +129,9 @@ def compressed_projector_sum_rules_O2(
         nonzero_c = nonzero_c.reshape((natom, natom)).T.reshape(-1)
         nonzero = nonzero & nonzero_c
 
+    # Auto-select batch count for large systems
+    if n_batch == 1 and natom > 256:
+        n_batch = _auto_n_batch_sum_rules_O2(natom)
     batch_size = optimize_batch_size_sum_rules_O2(natom, n_batch=n_batch)
     ab = np.arange(9)
     for begin, end in zip(*get_batch_slice(NN, batch_size), strict=True):
